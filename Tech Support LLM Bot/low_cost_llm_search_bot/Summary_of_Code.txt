@@ -1,0 +1,165 @@
+Summary_of_Code
+================
+
+Purpose
+-------
+This folder contains a low-cost, local-first AI search bot intended for a Windows Server 2025 Standard deployment. The assistant uses local documents and optionally approved web pages as retrieval sources. It uses Ollama for local LLM and embedding work, avoiding paid LLM API calls. It prioritizes low cost and clear source grounding over speed.
+
+Main Folder Layout
+------------------
+app/
+  Contains the Python FastAPI application and all core assistant logic.
+
+app/static/
+  Contains the small browser interface: index.html, style.css, and script.js. This is optional but useful for quick testing.
+
+scripts/
+  Contains PowerShell scripts for creating folders, installing requirements, running the backend, and performing smoke tests on Windows Server.
+
+tests/
+  Contains a minimal Python smoke test for the local health endpoint.
+
+deployment/
+  Contains IIS reverse proxy configuration that can be copied to the IIS site folder after URL Rewrite and Application Request Routing are installed.
+
+requirements.txt
+  Lists the Python packages needed by the assistant.
+
+.env.example
+  Example environment configuration. Copy this to .env, change the API key, model names, folder paths, and feature flags.
+
+README.md
+  General setup and quick-start instructions.
+
+Summary_of_Code.txt
+  This quick-reference file for troubleshooting and stakeholder explanations.
+
+Core Python Files
+-----------------
+app/main.py
+  FastAPI entry point. Defines API routes, serves the web UI, starts logging, initializes SQLite, and exposes endpoints for health checks, querying, ingestion, source listing, web crawling, and model unloading.
+
+app/config.py
+  Central configuration file. Loads settings from environment variables or .env. Stores paths, model names, resource limits, crawl controls, API-key settings, and guardrail settings.
+
+app/logging_config.py
+  Configures console and rotating file logs. Logs are written to the configured log directory.
+
+app/models.py
+  Pydantic request and response models. Defines the expected API payloads for queries, ingestion, crawling, health checks, and source responses.
+
+app/security.py
+  API-key enforcement and basic in-memory rate limiting. This is useful for the pilot, but IIS/SSO should be used for stronger authentication in an enterprise deployment.
+
+app/guardrails.py
+  Safety and policy checks. Detects possible secrets, redacts secrets, flags prompt-injection language, validates user questions, and validates web crawl URLs. It blocks unsafe URL schemes, blocked domains, private network destinations, and cross-domain crawling by default.
+
+app/hash_utils.py
+  Utility functions for creating SHA-256 hashes of files and text. Hashes are used for incremental ingestion and stable IDs.
+
+app/chunker.py
+  Splits extracted text into overlapping chunks for embedding. This helps the assistant retrieve relevant sections instead of entire documents.
+
+app/document_parsers.py
+  Extracts text from supported file types: text, Markdown, CSV, HTML, PDF, and Word documents. PDF extraction does not perform OCR.
+
+app/ollama_client.py
+  Local Ollama client. Sends embedding and chat requests to Ollama on localhost. Includes fallback support for older embedding endpoints and a model unload helper.
+
+app/sqlite_store.py
+  Cheap local vector store using SQLite. Stores documents, chunks, embeddings, and metadata. Search is brute-force cosine similarity, which is inexpensive and simple but slower than a dedicated vector database.
+
+app/indexing.py
+  Shared indexing logic. Takes source text, checks for secrets, redacts when configured, chunks the text, embeds the chunks, and stores them in SQLite.
+
+app/ingestion.py
+  File ingestion workflow. Walks the configured document folder, parses supported files, skips unchanged files, and indexes approved content.
+
+app/web_scraper.py
+  Controlled web crawling and scraping. Uses allowlists, blocklists, robots.txt checks, page-size limits, timeouts, same-domain crawling, and crawl-depth limits. Indexed pages are treated as lower-authority web evidence.
+
+app/searxng_client.py
+  Optional SearXNG integration. If enabled, it asks a self-hosted SearXNG instance for search result URLs, then the crawler fetches allowed pages. This avoids paid search APIs but still requires approved local SearXNG infrastructure.
+
+app/rag.py
+  Retrieval-augmented generation logic. Embeds the user question, retrieves matching chunks, builds grounded context, enforces a single inference request by default, and asks the local Ollama chat model to answer only from retrieved evidence.
+
+Static UI Files
+---------------
+app/static/index.html
+  Simple internal web page for asking questions.
+
+app/static/style.css
+  Basic styling for the internal web page.
+
+app/static/script.js
+  Browser-side JavaScript that sends questions to /api/query and displays answers and sources. It stores the API key in browser local storage for pilot convenience only.
+
+PowerShell Scripts
+------------------
+scripts/create_folders.ps1
+  Creates the default C:\RAGAssistant folder structure.
+
+scripts/install_requirements.ps1
+  Creates a Python virtual environment and installs dependencies from requirements.txt.
+
+scripts/run_backend.ps1
+  Starts FastAPI/Uvicorn on 127.0.0.1:8088 so IIS can reverse proxy to it over localhost.
+
+scripts/smoke_test.ps1
+  Checks the FastAPI health endpoint and the local Ollama model list endpoint.
+
+scripts/create_scheduled_task.ps1
+  Creates a Windows startup scheduled task for the backend. Replace the example service account before use.
+
+Important Security Defaults
+---------------------------
+1. API-key authentication is enabled by default.
+2. Web crawling is disabled by default.
+3. SearXNG search is disabled by default.
+4. Cross-domain crawling is disabled unless an allowed-domain list is configured.
+5. Private, loopback, link-local, and multicast crawl destinations are blocked by default.
+6. robots.txt is respected by default.
+7. Files that appear to contain secrets are skipped by default.
+8. Retrieved web pages are treated as low-authority evidence.
+9. The model is instructed not to follow instructions inside retrieved documents or web pages.
+10. The app returns sanitized source metadata and avoids returning server file paths.
+
+Troubleshooting Notes
+---------------------
+If the assistant cannot answer questions:
+  1. Confirm Ollama is running at http://127.0.0.1:11434.
+  2. Confirm the configured chat and embedding models are pulled.
+  3. Confirm documents exist in C:\RAGAssistant\data\documents.
+  4. Run the ingestion endpoint.
+  5. Check C:\RAGAssistant\data\logs\assistant.log.
+  6. Call /api/admin/sources to verify indexed sources.
+
+If answers are slow:
+  1. Use a smaller quantized model.
+  2. Reduce TOP_K.
+  3. Reduce MAX_CONTEXT_CHARS.
+  4. Reduce NUM_CTX and NUM_PREDICT.
+  5. Keep MAX_CONCURRENT_INFERENCE at 1 for low-resource VMs.
+
+If web crawling fails:
+  1. Confirm ENABLE_WEB_CRAWL=true.
+  2. Confirm the target domain is allowed.
+  3. Confirm the page is not blocked by robots.txt.
+  4. Confirm the page content type is text/html or text/plain.
+  5. Confirm the target is not a private network address unless explicitly allowed.
+
+If ingestion skips files:
+  1. Confirm the file type is supported.
+  2. Confirm the file has extractable text.
+  3. Check whether the file appears to contain secrets.
+  4. Check the logs for parser errors.
+
+IIS Deployment File
+-------------------
+deployment/iis_web.config
+  Example IIS reverse proxy configuration. It forwards HTTPS requests received by IIS to FastAPI on http://127.0.0.1:8088 and adds basic HTTP security headers.
+
+Recommended Pilot Boundary
+--------------------------
+Expose only HTTPS through IIS to internal users. Keep FastAPI on 127.0.0.1:8088, Ollama on 127.0.0.1:11434, and SQLite on the local filesystem. Do not expose the vector store or Ollama directly to users.

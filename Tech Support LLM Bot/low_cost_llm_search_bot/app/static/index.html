@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Cybersecurity AI Assistant</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <main>
+        <h1>Cybersecurity AI Assistant</h1>
+        <p class="notice">
+            Internal pilot. Answers are advisory and should be verified against cited sources.
+        </p>
+
+        <label for="apiKey">API key</label>
+        <input id="apiKey" type="password" placeholder="Enter API key if required">
+
+        <label for="mode">Search mode</label>
+        <select id="mode">
+            <option value="internal_only">Internal documents only</option>
+            <option value="internal_plus_web">Internal + indexed/live web</option>
+            <option value="web_only">Web only</option>
+        </select>
+
+        <label class="inline">
+            <input id="useLiveWeb" type="checkbox">
+            Use live web crawl for this question
+        </label>
+
+        <label for="seedUrls">Seed URLs, one per line, optional</label>
+        <textarea id="seedUrls" placeholder="https://example.com/security-doc"></textarea>
+
+        <label for="question">Question</label>
+        <textarea id="question" placeholder="Ask a question about the indexed cybersecurity sources."></textarea>
+
+        <button id="askButton" type="button">Ask</button>
+
+        <section id="status"></section>
+        <section id="answer"></section>
+        <section id="sources"></section>
+    </main>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
